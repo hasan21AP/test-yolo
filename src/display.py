@@ -29,7 +29,17 @@ class Display:
                 (x, y),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.6,
-                (0, 255, 0),
+                (0, 0, 0),
+                4
+            )
+
+            cv2.putText(
+                frame,
+                line,
+                (x, y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (255, 255, 255),
                 2
             )
 

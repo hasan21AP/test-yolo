@@ -1,8 +1,8 @@
 # Model
-model: "runs/detect/yolov8n_vehicle_100e-4/weights/best.pt"
+model: "runs/detect/yolov8n_vehicle_100e-4/weights/best.onnx"
 
 # Device
-device: cpu
+device: 0
 
 # YOLO
 imgsz: 640
