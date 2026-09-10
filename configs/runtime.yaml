@@ -1,0 +1,15 @@
+model: "runs/detect/yolov8n_vehicle_100e-4/weights/best.pt"
+
+device: cpu
+imgsz: 640
+conf: 0.35
+
+mode: track
+tracker: bytetrack.yaml
+
+source_type: video
+source: "tests/videos/test4.mp4"
+
+show: true
+save_video: false
+save_csv: true
