@@ -1,221 +1,192 @@
-from pathlib import Path
+import time
+from datetime import datetime
 
-import cv2
-import yaml
-from ultralytics import YOLO
-
-
-# =========================================================
-# Paths
-# =========================================================
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PATH = PROJECT_ROOT / "configs" / "runtime.yaml"
+from src.config import load_config
+from src.video_source import VideoSource
+from src.model_runner import ModelRunner
+from src.monitor import Monitor
+from src.logger import CSVLogger
+from src.display import Display
+from src.video_writer import VideoWriter
 
 
-# =========================================================
-# Load runtime configuration
-# =========================================================
-with open(CONFIG_PATH, "r", encoding="utf-8") as file:
-    config = yaml.safe_load(file)
+def main():
 
+    config = load_config()
 
-MODEL_PATH = config["model"]
-DEVICE = config["device"]
-IMG_SIZE = config["imgsz"]
-CONF = config["conf"]
+    source = VideoSource(config["source"])
+    source.open()
 
-MODE = config["mode"]
-TRACKER = config["tracker"]
-
-SOURCE_TYPE = config["source_type"]
-SOURCE = config["source"]
-
-SHOW = config.get("show", True)
-SAVE_VIDEO = config.get("save_video", False)
-
-
-# =========================================================
-# Resolve model path
-# =========================================================
-model_path = Path(MODEL_PATH)
-
-if not model_path.is_absolute():
-    model_path = PROJECT_ROOT / model_path
-
-
-# =========================================================
-# Resolve source
-# =========================================================
-if SOURCE_TYPE == "video":
-    source = Path(SOURCE)
-
-    if not source.is_absolute():
-        source = PROJECT_ROOT / source
-
-    source = str(source)
-
-elif SOURCE_TYPE == "webcam":
-    # Example: source: 0
-    source = int(SOURCE)
-
-elif SOURCE_TYPE == "ip_camera":
-    # Example:
-    # source: "rtsp://192.168.1.100:8554/live"
-    source = SOURCE
-
-else:
-    raise ValueError(f"Unknown source_type: {SOURCE_TYPE}")
-
-
-# =========================================================
-# Load YOLO model
-# =========================================================
-print("=" * 50)
-print(f"Model       : {model_path}")
-print(f"Device      : {DEVICE}")
-print(f"Mode        : {MODE}")
-print(f"Source type : {SOURCE_TYPE}")
-print(f"Source      : {source}")
-
-if MODE == "track":
-    print(f"Tracker     : {TRACKER}")
-
-print("=" * 50)
-
-
-model = YOLO(str(model_path))
-
-
-# =========================================================
-# Open video / camera
-# =========================================================
-cap = cv2.VideoCapture(source)
-
-if not cap.isOpened():
-    raise RuntimeError(f"Could not open source: {source}")
-
-
-# =========================================================
-# Optional video writer
-# =========================================================
-writer = None
-
-if SAVE_VIDEO:
-    output_dir = PROJECT_ROOT / "results"
-    output_dir.mkdir(exist_ok=True)
-
-    output_path = output_dir / "output.mp4"
-
-    fps = cap.get(cv2.CAP_PROP_FPS)
-
-    if fps <= 0:
-        fps = 30
-
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-
-    writer = cv2.VideoWriter(
-        str(output_path),
-        fourcc,
-        fps,
-        (width, height)
+    model = ModelRunner(
+        model_path=config["model"],
+        device=config["device"],
+        imgsz=config["imgsz"],
+        conf=config["conf"]
     )
 
-    print(f"Saving video to: {output_path}")
+    monitor = Monitor(update_interval=5.0)
 
+    logger = CSVLogger()
 
-# =========================================================
-# Main loop
-# =========================================================
-while True:
+    display = Display()
 
-    ret, frame = cap.read()
+    video_writer = None
 
-    if not ret:
-        print("Video finished or camera disconnected.")
-        break
-
-
-    # -----------------------------------------------------
-    # Detection only
-    # -----------------------------------------------------
-    if MODE == "detect":
-
-        results = model.predict(
-            source=frame,
-            imgsz=IMG_SIZE,
-            conf=CONF,
-            device=DEVICE,
-            verbose=False
+    if config["save_video"]:
+        video_writer = VideoWriter(
+            output_path="outputs/output.mp4",
+            fps=source.fps,
+            width=source.width,
+            height=source.height
         )
 
+        video_writer.open()
 
-    # -----------------------------------------------------
-    # Detection + Tracking
-    # -----------------------------------------------------
-    elif MODE == "track":
+    frame_number = 0
 
-        results = model.track(
-            source=frame,
-            imgsz=IMG_SIZE,
-            conf=CONF,
-            device=DEVICE,
+    try:
 
-            tracker=TRACKER,
+        while True:
 
-            # Keep tracking IDs between frames
-            persist=True,
+            processing_start = time.perf_counter()
 
-            verbose=False
-        )
+            ret, frame = source.read()
 
-    else:
-        raise ValueError(
-            f"Unknown mode: {MODE}. "
-            "Use 'detect' or 'track'."
-        )
+            if not ret:
+                break
+
+            frame_number += 1
+
+            model_start = time.perf_counter()
+
+            if config["mode"] == "track":
+
+                results = model.track(
+                    frame,
+                    tracker=config["tracker"]
+                )
+
+            else:
+
+                results = model.detect(frame)
+
+            model_end = time.perf_counter()
+
+            model_call_latency = (
+                model_end - model_start
+            ) * 1000
+
+            result = results[0]
+
+            inference_latency = result.speed.get(
+                "inference",
+                0.0
+            )
+
+            boxes = result.boxes
+
+            detections_count = len(boxes)
+
+            annotated_frame = result.plot()
+
+            timestamp = datetime.now().isoformat()
+
+            if config["save_csv"]:
+
+                for box in boxes:
+
+                    class_id = int(box.cls[0])
+
+                    class_name = result.names[class_id]
+
+                    confidence = float(box.conf[0])
+
+                    xywh = box.xywh[0].tolist()
+                    xyxy = box.xyxy[0].tolist()
+
+                    x_center, y_center, width, height = xywh
+                    x1, y1, x2, y2 = xyxy
+
+                    track_id = None
+
+                    if box.id is not None:
+                        track_id = int(box.id[0])
+
+                    logger.log_detection(
+                        {
+                            "frame": frame_number,
+                            "timestamp": timestamp,
+                            "track_id": track_id,
+                            "class_id": class_id,
+                            "class_name": class_name,
+                            "confidence": confidence,
+                            "x_center": x_center,
+                            "y_center": y_center,
+                            "width": width,
+                            "height": height,
+                            "x1": x1,
+                            "y1": y1,
+                            "x2": x2,
+                            "y2": y2
+                        }
+                    )
+
+            processing_end = time.perf_counter()
+
+            processing_latency = (
+                processing_end - processing_start
+            ) * 1000
+
+            updated = monitor.update(
+                inference_latency=inference_latency,
+                model_call_latency=model_call_latency,
+                processing_latency=processing_latency,
+                detections=detections_count
+            )
+
+            if updated and config["save_csv"]:
+
+                logger.log_monitoring(
+                    {
+                        "timestamp": timestamp,
+                        "fps": monitor.fps,
+                        "inference_latency": monitor.inference_latency,
+                        "model_call_latency": monitor.model_call_latency,
+                        "processing_latency": monitor.processing_latency,
+                        "cpu_process": monitor.cpu_process,
+                        "cpu_system": monitor.cpu_system,
+                        "ram_process": monitor.ram_process,
+                        "ram_system": monitor.ram_system,
+                        "detections": monitor.detections
+                    }
+                )
+
+            annotated_frame = display.draw_monitoring(
+                annotated_frame,
+                monitor
+            )
+
+            if video_writer is not None:
+                video_writer.write(annotated_frame)
+
+            if config["show"]:
+
+                display.show(annotated_frame)
+
+                if display.should_quit():
+                    break
+
+    finally:
+
+        source.release()
+
+        logger.close()
+
+        display.close()
+
+        if video_writer is not None:
+            video_writer.release()
 
 
-    # =====================================================
-    # Draw results
-    # =====================================================
-    annotated_frame = results[0].plot()
-
-
-    # =====================================================
-    # Save processed video
-    # =====================================================
-    if writer is not None:
-        writer.write(annotated_frame)
-
-
-    # =====================================================
-    # Display
-    # =====================================================
-    if SHOW:
-
-        cv2.imshow(
-            f"YOLO - {MODE.upper()}",
-            annotated_frame
-        )
-
-        key = cv2.waitKey(1) & 0xFF
-
-        # Q or ESC to stop
-        if key == ord("q") or key == 27:
-            break
-
-
-# =========================================================
-# Cleanup
-# =========================================================
-cap.release()
-
-if writer is not None:
-    writer.release()
-
-cv2.destroyAllWindows()
-
-print("Program finished.")
+if __name__ == "__main__":
+    main()

@@ -1,15 +1,24 @@
+# Model
 model: "runs/detect/yolov8n_vehicle_100e-4/weights/best.pt"
 
+# Device
 device: cpu
+
+# YOLO
 imgsz: 640
 conf: 0.35
 
+# Mode
 mode: track
+
+# Will be used later when mode = track
 tracker: bytetrack.yaml
 
+# Source
 source_type: video
 source: "tests/videos/test4.mp4"
 
+# Output
 show: true
 save_video: false
 save_csv: true
