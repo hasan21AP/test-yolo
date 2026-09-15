@@ -9,12 +9,22 @@ class CSVLogger:
         monitoring_path="logs/monitoring.csv",
         detections_path="logs/detections.csv"
     ):
+
         self.monitoring_path = Path(monitoring_path)
         self.detections_path = Path(detections_path)
 
-        self.monitoring_path.parent.mkdir(parents=True, exist_ok=True)
-        self.detections_path.parent.mkdir(parents=True, exist_ok=True)
+        # Create logs folder if it does not exist
+        self.monitoring_path.parent.mkdir(
+            parents=True,
+            exist_ok=True
+        )
 
+        self.detections_path.parent.mkdir(
+            parents=True,
+            exist_ok=True
+        )
+
+        # Open new CSV files for every run
         self.monitoring_file = open(
             self.monitoring_path,
             "w",
@@ -29,6 +39,10 @@ class CSVLogger:
             encoding="utf-8"
         )
 
+        # =================================================
+        # Monitoring fields
+        # =================================================
+
         self.monitoring_fields = [
             "timestamp",
             "fps",
@@ -42,22 +56,40 @@ class CSVLogger:
             "detections"
         ]
 
+        # =================================================
+        # Detection + Tracking + Kalman fields
+        # =================================================
+
         self.detection_fields = [
             "frame",
             "timestamp",
+
             "track_id",
+
             "class_id",
             "class_name",
             "confidence",
+
             "x_center",
             "y_center",
             "width",
             "height",
+
             "x1",
             "y1",
             "x2",
-            "y2"
+            "y2",
+
+            "predicted_x",
+            "predicted_y",
+
+            "velocity_x",
+            "velocity_y"
         ]
+
+        # =================================================
+        # CSV writers
+        # =================================================
 
         self.monitoring_writer = csv.DictWriter(
             self.monitoring_file,
@@ -69,20 +101,33 @@ class CSVLogger:
             fieldnames=self.detection_fields
         )
 
-        if self.monitoring_file.tell() == 0:
-            self.monitoring_writer.writeheader()
+        # Write headers
+        self.monitoring_writer.writeheader()
+        self.detections_writer.writeheader()
 
-        if self.detections_file.tell() == 0:
-            self.detections_writer.writeheader()
+    # =====================================================
+    # Monitoring log
+    # =====================================================
 
     def log_monitoring(self, data):
+
         self.monitoring_writer.writerow(data)
         self.monitoring_file.flush()
 
+    # =====================================================
+    # Detection log
+    # =====================================================
+
     def log_detection(self, data):
+
         self.detections_writer.writerow(data)
         self.detections_file.flush()
 
+    # =====================================================
+    # Close files
+    # =====================================================
+
     def close(self):
+
         self.monitoring_file.close()
         self.detections_file.close()
