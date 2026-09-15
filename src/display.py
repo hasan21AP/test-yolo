@@ -6,6 +6,12 @@ class Display:
     def __init__(self, window_name="Vehicle YOLO"):
         self.window_name = window_name
 
+        cv2.namedWindow(
+            self.window_name,
+            cv2.WINDOW_NORMAL
+        )
+
+
     def draw_monitoring(self, frame, monitor):
         lines = [
             f"FPS: {monitor.fps:.2f}",

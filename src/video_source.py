@@ -13,21 +13,61 @@ class VideoSource:
 
     def open(self):
 
-        self.cap = cv2.VideoCapture(self.source)
+        # Local webcam
+        if isinstance(self.source, int):
+
+            self.cap = cv2.VideoCapture(
+                self.source,
+                cv2.CAP_DSHOW
+            )
+
+            self.cap.set(
+                cv2.CAP_PROP_FOURCC,
+                cv2.VideoWriter_fourcc(*"MJPG")
+            )
+
+            # Request high resolution
+            self.cap.set(
+                cv2.CAP_PROP_FRAME_WIDTH,
+                1920
+            )
+
+            self.cap.set(
+                cv2.CAP_PROP_FRAME_HEIGHT,
+                1080
+            )
+
+        # Video file / IP camera
+        else:
+
+            self.cap = cv2.VideoCapture(
+                self.source
+            )
 
         if not self.cap.isOpened():
-            raise RuntimeError(f"Failed to open video source: {self.source}")
+            raise RuntimeError(
+                f"Failed to open video source: {self.source}"
+            )
 
-        self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+        self.width = int(
+            self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+        )
+
+        self.height = int(
+            self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        )
+
+        self.fps = self.cap.get(
+            cv2.CAP_PROP_FPS
+        )
+
+        print(
+            f"Source resolution: "
+            f"{self.width}x{self.height}"
+        )
 
     def read(self):
-        ret, frame = self.cap.read()
-        return ret, frame
-
-    def is_opened(self):
-        return self.cap is not None and self.cap.isOpened()
+        return self.cap.read()
 
     def release(self):
 

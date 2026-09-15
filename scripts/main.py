@@ -59,16 +59,7 @@ def main():
 
             model_start = time.perf_counter()
 
-            if config["mode"] == "track":
-
-                results = model.track(
-                    frame,
-                    tracker=config["tracker"]
-                )
-
-            else:
-
-                results = model.detect(frame)
+            results = model.detect(frame)
 
             model_end = time.perf_counter()
 

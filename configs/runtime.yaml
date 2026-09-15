@@ -1,22 +1,22 @@
 # Model
-model: "runs/detect/yolov8n_vehicle_100e-4/weights/best.onnx"
+model: "runs/detect/yolov8n.pt"
 
 # Device
 device: 0
 
 # YOLO
-imgsz: 640
+imgsz: 480
 conf: 0.35
 
 # Mode
 mode: track
 
 # Will be used later when mode = track
-tracker: bytetrack.yaml
+tracker: iou
 
 # Source
-source_type: video
-source: "tests/videos/test4.mp4"
+source_type: webcam
+source: 0
 
 # Output
 show: true
