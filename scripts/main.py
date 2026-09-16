@@ -21,6 +21,9 @@ def main():
 
     config = load_config()
 
+    detection_mode = config["detection_mode"]
+    detection_interval = config["detection_interval"]
+
 
     # =====================================================
     # Video source
@@ -54,8 +57,9 @@ def main():
     if config["mode"] == "track":
 
         tracker = IoUTracker(
-            iou_threshold=0.3,
-            max_missed=5
+            iou_threshold=0.1,
+            max_missed=5,
+            distance_threshold=2.0
         )
 
 
@@ -69,7 +73,7 @@ def main():
 
 
     # =====================================================
-    # CSV Logger
+    # Logger
     # =====================================================
 
     logger = None
@@ -104,10 +108,12 @@ def main():
 
 
     # =====================================================
-    # Frame counter
+    # Runtime variables
     # =====================================================
 
     frame_number = 0
+
+    last_detection_time = None
 
 
     # =====================================================
@@ -134,148 +140,304 @@ def main():
 
 
             # -------------------------------------------------
-            # YOLO Detection
+            # Decide if YOLO should run
             # -------------------------------------------------
 
-            model_start = time.perf_counter()
-
-            results = model.detect(frame)
-
-            model_end = time.perf_counter()
+            current_time = time.perf_counter()
 
 
-            model_call_latency = (
-                model_end - model_start
-            ) * 1000
+            if detection_mode == "continuous":
+
+                run_yolo = True
 
 
-            result = results[0]
+            elif detection_mode == "interval":
 
-            boxes = result.boxes
-
-
-            # -------------------------------------------------
-            # YOLO inference latency
-            # -------------------------------------------------
-
-            inference_latency = result.speed.get(
-                "inference",
-                0.0
-            )
-
-
-            # -------------------------------------------------
-            # Convert YOLO boxes to our detections
-            # -------------------------------------------------
-
-            detections = []
-
-            for box in boxes:
-
-                class_id = int(
-                    box.cls[0]
+                run_yolo = (
+                    last_detection_time is None
+                    or
+                    current_time - last_detection_time
+                    >= detection_interval
                 )
 
-                confidence = float(
-                    box.conf[0]
-                )
-
-                x1, y1, x2, y2 = (
-                    box.xyxy[0].tolist()
-                )
-
-                detections.append(
-                    {
-                        "bbox": [
-                            x1,
-                            y1,
-                            x2,
-                            y2
-                        ],
-                        "class_id": class_id,
-                        "class_name": result.names[
-                            class_id
-                        ],
-                        "confidence": confidence
-                    }
-                )
-
-
-            # -------------------------------------------------
-            # Tracking
-            # -------------------------------------------------
-
-            if tracker is not None:
-
-                detections = tracker.update(
-                    detections
-                )
 
             else:
 
-                for detection in detections:
+                raise ValueError(
+                    f"Unknown detection_mode: "
+                    f"{detection_mode}"
+                )
 
-                    detection[
-                        "track_id"
-                    ] = None
 
+            # -------------------------------------------------
+            # Default latency values
+            # -------------------------------------------------
+
+            model_call_latency = 0.0
+            inference_latency = 0.0
+
+
+            # =================================================
+            # YOLO ON
+            # =================================================
+
+            if run_yolo:
+
+                model_start = time.perf_counter()
+
+
+                results = model.detect(
+                    frame
+                )
+
+
+                model_end = time.perf_counter()
+
+
+                model_call_latency = (
+                    model_end
+                    - model_start
+                ) * 1000
+
+
+                # Start interval after YOLO finishes
+                last_detection_time = (
+                    time.perf_counter()
+                )
+
+
+                result = results[0]
+
+                boxes = result.boxes
+
+
+                inference_latency = (
+                    result.speed.get(
+                        "inference",
+                        0.0
+                    )
+                )
+
+
+                # ---------------------------------------------
+                # Convert YOLO boxes to detections
+                # ---------------------------------------------
+
+                detections = []
+
+
+                for box in boxes:
+
+                    class_id = int(
+                        box.cls[0]
+                    )
+
+                    confidence = float(
+                        box.conf[0]
+                    )
+
+                    x1, y1, x2, y2 = (
+                        box.xyxy[0].tolist()
+                    )
+
+
+                    detections.append(
+                        {
+                            "bbox": [
+                                x1,
+                                y1,
+                                x2,
+                                y2
+                            ],
+
+                            "class_id":
+                                class_id,
+
+                            "class_name":
+                                result.names[
+                                    class_id
+                                ],
+
+                            "confidence":
+                                confidence
+                        }
+                    )
+
+
+                # ---------------------------------------------
+                # Tracking + Kalman update
+                # ---------------------------------------------
+
+                if tracker is not None:
+
+                    detections = (
+                        tracker.update(
+                            detections
+                        )
+                    )
+
+
+                else:
+
+                    for detection in detections:
+
+                        detection["track_id"] = None
+
+                        detection["predicted_x"] = None
+                        detection["predicted_y"] = None
+
+                        detection["velocity_x"] = None
+                        detection["velocity_y"] = None
+
+
+            # =================================================
+            # YOLO OFF
+            # =================================================
+
+            else:
+
+                # YOLO does not run here
+                model_call_latency = 0.0
+                inference_latency = 0.0
+
+
+                # Kalman prediction only
+                if tracker is not None:
+
+                    detections = (
+                        tracker.predict_only()
+                    )
+
+
+                else:
+
+                    detections = []
+
+
+            # =================================================
+            # Detection count
+            # =================================================
 
             detections_count = len(
                 detections
             )
 
 
-            # -------------------------------------------------
-            # Draw normal YOLO results
-            # -------------------------------------------------
+            # =================================================
+            # Original high-resolution frame
+            # =================================================
 
-            annotated_frame = result.plot()
+            annotated_frame = frame.copy()
 
 
-            # -------------------------------------------------
-            # Draw Track ID + Kalman estimate
-            # -------------------------------------------------
+            # =================================================
+            # Draw detections / tracks
+            # =================================================
 
-            if tracker is not None:
+            for detection in detections:
 
-                for detection in detections:
+                x1, y1, x2, y2 = (
+                    detection["bbox"]
+                )
 
-                    x1, y1, x2, y2 = (
-                        detection["bbox"]
+
+                x1 = int(x1)
+                y1 = int(y1)
+                x2 = int(x2)
+                y2 = int(y2)
+
+
+                # Bounding box
+                cv2.rectangle(
+                    annotated_frame,
+                    (x1, y1),
+                    (x2, y2),
+                    (0, 255, 0),
+                    2
+                )
+
+
+                class_name = detection[
+                    "class_name"
+                ]
+
+                confidence = detection[
+                    "confidence"
+                ]
+
+                track_id = detection.get(
+                    "track_id"
+                )
+
+
+                # ---------------------------------------------
+                # Label
+                # ---------------------------------------------
+
+                if track_id is not None:
+
+                    label = (
+                        f"{class_name} "
+                        f"ID:{track_id} "
+                        f"{confidence:.2f}"
                     )
 
-                    track_id = detection[
-                        "track_id"
-                    ]
+                else:
 
-                    predicted_x = detection[
-                        "predicted_x"
-                    ]
-
-                    predicted_y = detection[
-                        "predicted_y"
-                    ]
-
-
-                    # Track ID
-                    cv2.putText(
-                        annotated_frame,
-                        f"ID: {track_id}",
-                        (
-                            int(x1),
-                            max(
-                                int(y1) - 25,
-                                20
-                            )
-                        ),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.7,
-                        (255, 255, 255),
-                        2
+                    label = (
+                        f"{class_name} "
+                        f"{confidence:.2f}"
                     )
 
 
-                    # Kalman estimated position
+                label_position = (
+                    x1,
+                    max(y1 - 10, 20)
+                )
+
+
+                # Black outline
+                cv2.putText(
+                    annotated_frame,
+                    label,
+                    label_position,
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 0, 0),
+                    4
+                )
+
+
+                # White text
+                cv2.putText(
+                    annotated_frame,
+                    label,
+                    label_position,
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (255, 255, 255),
+                    2
+                )
+
+
+                # ---------------------------------------------
+                # Kalman estimated position
+                # ---------------------------------------------
+
+                predicted_x = detection.get(
+                    "predicted_x"
+                )
+
+                predicted_y = detection.get(
+                    "predicted_y"
+                )
+
+
+                if (
+                    predicted_x is not None
+                    and predicted_y is not None
+                ):
+
                     cv2.circle(
                         annotated_frame,
                         (
@@ -288,18 +450,18 @@ def main():
                     )
 
 
-            # -------------------------------------------------
+            # =================================================
             # Timestamp
-            # -------------------------------------------------
+            # =================================================
 
             timestamp = (
                 datetime.now().isoformat()
             )
 
 
-            # -------------------------------------------------
+            # =================================================
             # Detection CSV
-            # -------------------------------------------------
+            # =================================================
 
             if logger is not None:
 
@@ -309,8 +471,10 @@ def main():
                         detection["bbox"]
                     )
 
+
                     width = x2 - x1
                     height = y2 - y1
+
 
                     x_center = (
                         x1 + x2
@@ -323,49 +487,87 @@ def main():
 
                     logger.log_detection(
                         {
-                            "frame": frame_number,
-                            "timestamp": timestamp,
+                            "frame":
+                                frame_number,
 
-                            "track_id": detection["track_id"],
+                            "timestamp":
+                                timestamp,
 
-                            "class_id": detection["class_id"],
-                            "class_name": detection["class_name"],
-                            "confidence": detection["confidence"],
+                            "track_id":
+                                detection.get(
+                                    "track_id"
+                                ),
 
-                            "x_center": x_center,
-                            "y_center": y_center,
-                            "width": width,
-                            "height": height,
+                            "class_id":
+                                detection[
+                                    "class_id"
+                                ],
 
-                            "x1": x1,
-                            "y1": y1,
-                            "x2": x2,
-                            "y2": y2,
+                            "class_name":
+                                detection[
+                                    "class_name"
+                                ],
 
-                            "predicted_x": detection.get(
-                                "predicted_x"
-                            ),
+                            "confidence":
+                                detection[
+                                    "confidence"
+                                ],
 
-                            "predicted_y": detection.get(
-                                "predicted_y"
-                            ),
+                            "x_center":
+                                x_center,
 
-                            "velocity_x": detection.get(
-                                "velocity_x"
-                            ),
+                            "y_center":
+                                y_center,
 
-                            "velocity_y": detection.get(
-                                "velocity_y"
-                            )
+                            "width":
+                                width,
+
+                            "height":
+                                height,
+
+                            "x1":
+                                x1,
+
+                            "y1":
+                                y1,
+
+                            "x2":
+                                x2,
+
+                            "y2":
+                                y2,
+
+                            "predicted_x":
+                                detection.get(
+                                    "predicted_x"
+                                ),
+
+                            "predicted_y":
+                                detection.get(
+                                    "predicted_y"
+                                ),
+
+                            "velocity_x":
+                                detection.get(
+                                    "velocity_x"
+                                ),
+
+                            "velocity_y":
+                                detection.get(
+                                    "velocity_y"
+                                )
                         }
                     )
 
 
-            # -------------------------------------------------
+            # =================================================
             # Processing latency
-            # -------------------------------------------------
+            # =================================================
 
-            processing_end = time.perf_counter()
+            processing_end = (
+                time.perf_counter()
+            )
+
 
             processing_latency = (
                 processing_end
@@ -373,11 +575,12 @@ def main():
             ) * 1000
 
 
-            # -------------------------------------------------
+            # =================================================
             # Monitoring
-            # -------------------------------------------------
+            # =================================================
 
             updated = monitor.update(
+
                 inference_latency=
                     inference_latency,
 
@@ -392,9 +595,9 @@ def main():
             )
 
 
-            # -------------------------------------------------
+            # =================================================
             # Monitoring CSV
-            # -------------------------------------------------
+            # =================================================
 
             if (
                 updated
@@ -436,9 +639,9 @@ def main():
                 )
 
 
-            # -------------------------------------------------
+            # =================================================
             # Draw monitoring information
-            # -------------------------------------------------
+            # =================================================
 
             annotated_frame = (
                 display.draw_monitoring(
@@ -448,9 +651,9 @@ def main():
             )
 
 
-            # -------------------------------------------------
-            # Save output video
-            # -------------------------------------------------
+            # =================================================
+            # Save video
+            # =================================================
 
             if video_writer is not None:
 
@@ -459,9 +662,9 @@ def main():
                 )
 
 
-            # -------------------------------------------------
+            # =================================================
             # Display
-            # -------------------------------------------------
+            # =================================================
 
             if config["show"]:
 
@@ -483,8 +686,10 @@ def main():
 
         display.close()
 
+
         if logger is not None:
             logger.close()
+
 
         if video_writer is not None:
             video_writer.release()

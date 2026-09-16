@@ -20,13 +20,11 @@ DEFAULT_CONFIG_PATH = (
 # =========================================================
 
 def load_config(config_path=None):
-    """
-    Load runtime.yaml and prepare all required paths.
-    """
 
     # Use default config if no path is provided
     if config_path is None:
         config_path = DEFAULT_CONFIG_PATH
+
     else:
         config_path = Path(config_path)
 
@@ -39,6 +37,7 @@ def load_config(config_path=None):
     # -----------------------------------------------------
 
     if not config_path.exists():
+
         raise FileNotFoundError(
             f"Config file not found:\n{config_path}"
         )
@@ -58,14 +57,15 @@ def load_config(config_path=None):
 
 
     if config is None:
+
         raise ValueError(
             "Configuration file is empty."
         )
 
 
-    # -----------------------------------------------------
+    # =====================================================
     # Required settings
-    # -----------------------------------------------------
+    # =====================================================
 
     required_keys = [
         "model",
@@ -81,16 +81,64 @@ def load_config(config_path=None):
     for key in required_keys:
 
         if key not in config:
+
             raise KeyError(
                 f"Missing config setting: {key}"
             )
 
 
     # =====================================================
+    # Detection timing defaults
+    # =====================================================
+
+    if "detection_mode" not in config:
+
+        config["detection_mode"] = "continuous"
+
+
+    if "detection_interval" not in config:
+
+        config["detection_interval"] = 5.0
+
+
+    # =====================================================
+    # Validate detection mode
+    # =====================================================
+
+    if config["detection_mode"] not in [
+        "continuous",
+        "interval"
+    ]:
+
+        raise ValueError(
+            "detection_mode must be "
+            "'continuous' or 'interval'"
+        )
+
+
+    # =====================================================
+    # Validate detection interval
+    # =====================================================
+
+    config["detection_interval"] = float(
+        config["detection_interval"]
+    )
+
+
+    if config["detection_interval"] <= 0:
+
+        raise ValueError(
+            "detection_interval must be greater than 0"
+        )
+
+
+    # =====================================================
     # Resolve model path
     # =====================================================
 
-    model_path = Path(config["model"])
+    model_path = Path(
+        config["model"]
+    )
 
 
     if not model_path.is_absolute():
@@ -108,7 +156,9 @@ def load_config(config_path=None):
         )
 
 
-    config["model"] = str(model_path)
+    config["model"] = str(
+        model_path
+    )
 
 
     # =====================================================

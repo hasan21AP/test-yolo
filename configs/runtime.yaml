@@ -2,7 +2,7 @@
 model: "runs/detect/yolov8n.pt"
 
 # Device
-device: 0
+device: cpu
 
 # YOLO
 imgsz: 480
@@ -13,6 +13,10 @@ mode: track
 
 # Will be used later when mode = track
 tracker: iou
+
+# Detection timing
+detection_mode: continuous
+detection_interval: 0.5
 
 # Source
 source_type: webcam
