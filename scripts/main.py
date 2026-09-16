@@ -9,6 +9,7 @@ from src.model_runner import ModelRunner
 
 from src.iou_tracker import IoUTracker
 from src.single_iou_tracker import SingleIoUTracker
+from src.ocsort_tracker import OCSortTracker
 
 from src.monitor import Monitor
 from src.logger import CSVLogger
@@ -23,6 +24,9 @@ def main():
     # =====================================================
 
     config = load_config()
+
+    mode = config["mode"]
+    tracker_name = config.get("tracker", "single_iou")
 
     detection_mode = config["detection_mode"]
     detection_interval = config["detection_interval"]
@@ -57,13 +61,11 @@ def main():
 
     tracker = None
 
-    if config["mode"] == "track":
 
-        tracker_name = config["tracker"]
-
+    if mode == "track":
 
         # -------------------------------------------------
-        # Single target IoU tracker
+        # Single target IoU
         # -------------------------------------------------
 
         if tracker_name == "single_iou":
@@ -75,7 +77,7 @@ def main():
 
 
         # -------------------------------------------------
-        # Multi-object IoU + Kalman tracker
+        # Custom IoU + Kalman
         # -------------------------------------------------
 
         elif tracker_name == "iou":
@@ -83,6 +85,24 @@ def main():
             tracker = IoUTracker(
                 iou_threshold=0.10,
                 max_missed=12
+            )
+
+
+        # -------------------------------------------------
+        # OC-SORT
+        # -------------------------------------------------
+
+        elif tracker_name == "ocsort":
+
+            if detection_mode != "continuous":
+
+                raise ValueError(
+                    "OC-SORT currently requires "
+                    "detection_mode: continuous"
+                )
+
+            tracker = OCSortTracker(
+                model
             )
 
 
@@ -169,62 +189,35 @@ def main():
             if not ret:
                 break
 
+
             frame_number += 1
 
 
             # -------------------------------------------------
-            # Decide if YOLO should run
+            # Default values
             # -------------------------------------------------
 
-            current_time = (
-                time.perf_counter()
-            )
-
-
-            if detection_mode == "continuous":
-
-                run_yolo = True
-
-
-            elif detection_mode == "interval":
-
-                run_yolo = (
-                    last_detection_time is None
-                    or
-                    current_time - last_detection_time
-                    >= detection_interval
-                )
-
-
-            else:
-
-                raise ValueError(
-                    f"Unknown detection_mode: "
-                    f"{detection_mode}"
-                )
-
-
-            # -------------------------------------------------
-            # Default timing values
-            # -------------------------------------------------
+            detections = []
 
             model_call_latency = 0.0
-
             inference_latency = 0.0
 
 
             # =================================================
-            # YOLO ON
+            # OC-SORT
             # =================================================
 
-            if run_yolo:
+            if (
+                mode == "track"
+                and tracker_name == "ocsort"
+            ):
 
                 model_start = (
                     time.perf_counter()
                 )
 
 
-                results = model.detect(
+                results = tracker.update(
                     frame
                 )
 
@@ -240,14 +233,7 @@ def main():
                 ) * 1000
 
 
-                last_detection_time = (
-                    time.perf_counter()
-                )
-
-
                 result = results[0]
-
-                boxes = result.boxes
 
 
                 inference_latency = (
@@ -258,11 +244,7 @@ def main():
                 )
 
 
-                # ---------------------------------------------
-                # Convert YOLO boxes
-                # ---------------------------------------------
-
-                detections = []
+                boxes = result.boxes
 
 
                 for box in boxes:
@@ -271,15 +253,22 @@ def main():
                         box.cls[0]
                     )
 
-
                     confidence = float(
                         box.conf[0]
                     )
 
-
                     x1, y1, x2, y2 = (
                         box.xyxy[0].tolist()
                     )
+
+
+                    track_id = None
+
+                    if box.id is not None:
+
+                        track_id = int(
+                            box.id[0]
+                        )
 
 
                     detections.append(
@@ -291,6 +280,9 @@ def main():
                                 y2
                             ],
 
+                            "track_id":
+                                track_id,
+
                             "class_id":
                                 class_id,
 
@@ -300,75 +292,202 @@ def main():
                                 ],
 
                             "confidence":
-                                confidence
+                                confidence,
+
+                            "predicted_x":
+                                None,
+
+                            "predicted_y":
+                                None,
+
+                            "velocity_x":
+                                None,
+
+                            "velocity_y":
+                                None
                         }
                     )
 
 
-                # ---------------------------------------------
-                # Tracker update
-                # ---------------------------------------------
-
-                if tracker is not None:
-
-                    detections = (
-                        tracker.update(
-                            detections
-                        )
-                    )
-
-
-                else:
-
-                    for detection in detections:
-
-                        detection[
-                            "track_id"
-                        ] = None
-
-                        detection[
-                            "predicted_x"
-                        ] = None
-
-                        detection[
-                            "predicted_y"
-                        ] = None
-
-                        detection[
-                            "velocity_x"
-                        ] = None
-
-                        detection[
-                            "velocity_y"
-                        ] = None
-
-
             # =================================================
-            # YOLO OFF
+            # Detect / Custom trackers
             # =================================================
 
             else:
 
-                # YOLO does not run
-                model_call_latency = 0.0
-                inference_latency = 0.0
+                current_time = (
+                    time.perf_counter()
+                )
 
 
-                # Tracker only
-                if tracker is not None:
+                # ---------------------------------------------
+                # Decide if YOLO should run
+                # ---------------------------------------------
 
-                    detections = (
-                        tracker.predict_only()
+                if detection_mode == "continuous":
+
+                    run_yolo = True
+
+
+                elif detection_mode == "interval":
+
+                    run_yolo = (
+                        last_detection_time is None
+                        or
+                        current_time
+                        - last_detection_time
+                        >= detection_interval
                     )
 
 
                 else:
 
-                    detections = []
+                    raise ValueError(
+                        f"Unknown detection_mode: "
+                        f"{detection_mode}"
+                    )
+
+
+                # =============================================
+                # YOLO ON
+                # =============================================
+
+                if run_yolo:
+
+                    model_start = (
+                        time.perf_counter()
+                    )
+
+
+                    results = model.detect(
+                        frame
+                    )
+
+
+                    model_end = (
+                        time.perf_counter()
+                    )
+
+
+                    model_call_latency = (
+                        model_end
+                        - model_start
+                    ) * 1000
+
+
+                    last_detection_time = (
+                        time.perf_counter()
+                    )
+
+
+                    result = results[0]
+
+                    boxes = result.boxes
+
+
+                    inference_latency = (
+                        result.speed.get(
+                            "inference",
+                            0.0
+                        )
+                    )
+
+
+                    raw_detections = []
+
+
+                    for box in boxes:
+
+                        class_id = int(
+                            box.cls[0]
+                        )
+
+                        confidence = float(
+                            box.conf[0]
+                        )
+
+                        x1, y1, x2, y2 = (
+                            box.xyxy[0].tolist()
+                        )
+
+
+                        raw_detections.append(
+                            {
+                                "bbox": [
+                                    x1,
+                                    y1,
+                                    x2,
+                                    y2
+                                ],
+
+                                "class_id":
+                                    class_id,
+
+                                "class_name":
+                                    result.names[
+                                        class_id
+                                    ],
+
+                                "confidence":
+                                    confidence
+                            }
+                        )
+
+
+                    # -----------------------------------------
+                    # Tracking
+                    # -----------------------------------------
+
+                    if tracker is not None:
+
+                        detections = (
+                            tracker.update(
+                                raw_detections
+                            )
+                        )
+
+
+                    # -----------------------------------------
+                    # Detection only
+                    # -----------------------------------------
+
+                    else:
+
+                        detections = (
+                            raw_detections
+                        )
+
+
+                        for detection in detections:
+
+                            detection["track_id"] = None
+
+                            detection["predicted_x"] = None
+                            detection["predicted_y"] = None
+
+                            detection["velocity_x"] = None
+                            detection["velocity_y"] = None
+
+
+                # =============================================
+                # YOLO OFF
+                # =============================================
+
+                else:
+
+                    if tracker is not None:
+
+                        detections = (
+                            tracker.predict_only()
+                        )
+
+                    else:
+
+                        detections = []
 
 
             # =================================================
-            # Number of tracked objects
+            # Detection count
             # =================================================
 
             detections_count = len(
@@ -377,7 +496,7 @@ def main():
 
 
             # =================================================
-            # Keep original high-resolution frame
+            # Original high-resolution frame
             # =================================================
 
             annotated_frame = (
@@ -386,7 +505,7 @@ def main():
 
 
             # =================================================
-            # Draw detections / tracks
+            # Draw objects
             # =================================================
 
             for detection in detections:
@@ -415,18 +534,18 @@ def main():
                 )
 
 
-                class_name = detection[
-                    "class_name"
-                ]
+                class_name = (
+                    detection["class_name"]
+                )
 
+                confidence = (
+                    detection["confidence"]
+                )
 
-                confidence = detection[
-                    "confidence"
-                ]
-
-
-                track_id = detection.get(
-                    "track_id"
+                track_id = (
+                    detection.get(
+                        "track_id"
+                    )
                 )
 
 
@@ -484,7 +603,7 @@ def main():
 
 
                 # ---------------------------------------------
-                # Center / predicted position
+                # Predicted center
                 # ---------------------------------------------
 
                 predicted_x = (
@@ -552,7 +671,6 @@ def main():
                     x_center = (
                         x1 + x2
                     ) / 2
-
 
                     y_center = (
                         y1 + y2
@@ -715,7 +833,7 @@ def main():
 
 
             # =================================================
-            # Monitoring display
+            # Draw monitoring
             # =================================================
 
             annotated_frame = (
@@ -764,12 +882,10 @@ def main():
 
 
         if logger is not None:
-
             logger.close()
 
 
         if video_writer is not None:
-
             video_writer.release()
 
 

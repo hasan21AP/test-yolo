@@ -12,10 +12,10 @@ conf: 0.35
 mode: track
 
 # Will be used later when mode = track
-tracker: iou
+tracker: ocsort
 
 # Detection timing
-detection_mode: interval
+detection_mode: continuous
 detection_interval: 0.2
 
 # Source
