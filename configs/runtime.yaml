@@ -15,8 +15,8 @@ mode: track
 tracker: iou
 
 # Detection timing
-detection_mode: continuous
-detection_interval: 0.5
+detection_mode: interval
+detection_interval: 0.2
 
 # Source
 source_type: webcam

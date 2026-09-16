@@ -6,7 +6,10 @@ import cv2
 from src.config import load_config
 from src.video_source import VideoSource
 from src.model_runner import ModelRunner
+
 from src.iou_tracker import IoUTracker
+from src.single_iou_tracker import SingleIoUTracker
+
 from src.monitor import Monitor
 from src.logger import CSVLogger
 from src.display import Display
@@ -56,11 +59,38 @@ def main():
 
     if config["mode"] == "track":
 
-        tracker = IoUTracker(
-            iou_threshold=0.1,
-            max_missed=5,
-            distance_threshold=2.0
-        )
+        tracker_name = config["tracker"]
+
+
+        # -------------------------------------------------
+        # Single target IoU tracker
+        # -------------------------------------------------
+
+        if tracker_name == "single_iou":
+
+            tracker = SingleIoUTracker(
+                iou_threshold=0.25,
+                max_lost_frames=10
+            )
+
+
+        # -------------------------------------------------
+        # Multi-object IoU + Kalman tracker
+        # -------------------------------------------------
+
+        elif tracker_name == "iou":
+
+            tracker = IoUTracker(
+                iou_threshold=0.10,
+                max_missed=12
+            )
+
+
+        else:
+
+            raise ValueError(
+                f"Unknown tracker: {tracker_name}"
+            )
 
 
     # =====================================================
@@ -79,6 +109,7 @@ def main():
     logger = None
 
     if config["save_csv"]:
+
         logger = CSVLogger()
 
 
@@ -124,7 +155,9 @@ def main():
 
         while True:
 
-            processing_start = time.perf_counter()
+            processing_start = (
+                time.perf_counter()
+            )
 
 
             # -------------------------------------------------
@@ -143,7 +176,9 @@ def main():
             # Decide if YOLO should run
             # -------------------------------------------------
 
-            current_time = time.perf_counter()
+            current_time = (
+                time.perf_counter()
+            )
 
 
             if detection_mode == "continuous":
@@ -170,10 +205,11 @@ def main():
 
 
             # -------------------------------------------------
-            # Default latency values
+            # Default timing values
             # -------------------------------------------------
 
             model_call_latency = 0.0
+
             inference_latency = 0.0
 
 
@@ -183,7 +219,9 @@ def main():
 
             if run_yolo:
 
-                model_start = time.perf_counter()
+                model_start = (
+                    time.perf_counter()
+                )
 
 
                 results = model.detect(
@@ -191,7 +229,9 @@ def main():
                 )
 
 
-                model_end = time.perf_counter()
+                model_end = (
+                    time.perf_counter()
+                )
 
 
                 model_call_latency = (
@@ -200,7 +240,6 @@ def main():
                 ) * 1000
 
 
-                # Start interval after YOLO finishes
                 last_detection_time = (
                     time.perf_counter()
                 )
@@ -220,7 +259,7 @@ def main():
 
 
                 # ---------------------------------------------
-                # Convert YOLO boxes to detections
+                # Convert YOLO boxes
                 # ---------------------------------------------
 
                 detections = []
@@ -232,9 +271,11 @@ def main():
                         box.cls[0]
                     )
 
+
                     confidence = float(
                         box.conf[0]
                     )
+
 
                     x1, y1, x2, y2 = (
                         box.xyxy[0].tolist()
@@ -265,7 +306,7 @@ def main():
 
 
                 # ---------------------------------------------
-                # Tracking + Kalman update
+                # Tracker update
                 # ---------------------------------------------
 
                 if tracker is not None:
@@ -281,13 +322,25 @@ def main():
 
                     for detection in detections:
 
-                        detection["track_id"] = None
+                        detection[
+                            "track_id"
+                        ] = None
 
-                        detection["predicted_x"] = None
-                        detection["predicted_y"] = None
+                        detection[
+                            "predicted_x"
+                        ] = None
 
-                        detection["velocity_x"] = None
-                        detection["velocity_y"] = None
+                        detection[
+                            "predicted_y"
+                        ] = None
+
+                        detection[
+                            "velocity_x"
+                        ] = None
+
+                        detection[
+                            "velocity_y"
+                        ] = None
 
 
             # =================================================
@@ -296,12 +349,12 @@ def main():
 
             else:
 
-                # YOLO does not run here
+                # YOLO does not run
                 model_call_latency = 0.0
                 inference_latency = 0.0
 
 
-                # Kalman prediction only
+                # Tracker only
                 if tracker is not None:
 
                     detections = (
@@ -315,7 +368,7 @@ def main():
 
 
             # =================================================
-            # Detection count
+            # Number of tracked objects
             # =================================================
 
             detections_count = len(
@@ -324,10 +377,12 @@ def main():
 
 
             # =================================================
-            # Original high-resolution frame
+            # Keep original high-resolution frame
             # =================================================
 
-            annotated_frame = frame.copy()
+            annotated_frame = (
+                frame.copy()
+            )
 
 
             # =================================================
@@ -347,7 +402,10 @@ def main():
                 y2 = int(y2)
 
 
+                # ---------------------------------------------
                 # Bounding box
+                # ---------------------------------------------
+
                 cv2.rectangle(
                     annotated_frame,
                     (x1, y1),
@@ -361,9 +419,11 @@ def main():
                     "class_name"
                 ]
 
+
                 confidence = detection[
                     "confidence"
                 ]
+
 
                 track_id = detection.get(
                     "track_id"
@@ -392,7 +452,10 @@ def main():
 
                 label_position = (
                     x1,
-                    max(y1 - 10, 20)
+                    max(
+                        y1 - 10,
+                        20
+                    )
                 )
 
 
@@ -421,21 +484,26 @@ def main():
 
 
                 # ---------------------------------------------
-                # Kalman estimated position
+                # Center / predicted position
                 # ---------------------------------------------
 
-                predicted_x = detection.get(
-                    "predicted_x"
+                predicted_x = (
+                    detection.get(
+                        "predicted_x"
+                    )
                 )
 
-                predicted_y = detection.get(
-                    "predicted_y"
+                predicted_y = (
+                    detection.get(
+                        "predicted_y"
+                    )
                 )
 
 
                 if (
                     predicted_x is not None
-                    and predicted_y is not None
+                    and
+                    predicted_y is not None
                 ):
 
                     cv2.circle(
@@ -472,13 +540,19 @@ def main():
                     )
 
 
-                    width = x2 - x1
-                    height = y2 - y1
+                    width = (
+                        x2 - x1
+                    )
+
+                    height = (
+                        y2 - y1
+                    )
 
 
                     x_center = (
                         x1 + x2
                     ) / 2
+
 
                     y_center = (
                         y1 + y2
@@ -601,7 +675,8 @@ def main():
 
             if (
                 updated
-                and logger is not None
+                and
+                logger is not None
             ):
 
                 logger.log_monitoring(
@@ -640,7 +715,7 @@ def main():
 
 
             # =================================================
-            # Draw monitoring information
+            # Monitoring display
             # =================================================
 
             annotated_frame = (
@@ -672,6 +747,7 @@ def main():
                     annotated_frame
                 )
 
+
                 if display.should_quit():
                     break
 
@@ -688,12 +764,15 @@ def main():
 
 
         if logger is not None:
+
             logger.close()
 
 
         if video_writer is not None:
+
             video_writer.release()
 
 
 if __name__ == "__main__":
+
     main()
