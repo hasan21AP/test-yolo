@@ -1,12 +1,12 @@
 # Model
-model: "runs/detect/yolov8n.pt"
+model: "runs/detect/drone_only_v2.pt"
 
 # Device
-device: cpu
+device: 0
 
 # YOLO
-imgsz: 480
-conf: 0.35
+imgsz: 640
+conf: 0.2
 
 # Mode
 mode: track
@@ -16,11 +16,11 @@ tracker: ocsort
 
 # Detection timing
 detection_mode: continuous
-detection_interval: 0.2
+detection_interval: 0.1
 
 # Source
 source_type: webcam
-source: 0
+source: 1
 
 # Output
 show: true

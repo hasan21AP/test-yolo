@@ -10,11 +10,23 @@ from src.model_runner import ModelRunner
 from src.iou_tracker import IoUTracker
 from src.single_iou_tracker import SingleIoUTracker
 from src.ocsort_tracker import OCSortTracker
+from src.csrt_tracker import CSRTTracker
 
 from src.monitor import Monitor
 from src.logger import CSVLogger
 from src.display import Display
 from src.video_writer import VideoWriter
+
+
+def select_highest_confidence(detections):
+
+    if not detections:
+        return None
+
+    return max(
+        detections,
+        key=lambda detection: detection["confidence"]
+    )
 
 
 def main():
@@ -106,6 +118,15 @@ def main():
             )
 
 
+        # -------------------------------------------------
+        # CSRT single-object tracker
+        # -------------------------------------------------
+
+        elif tracker_name == "csrt":
+
+            tracker = CSRTTracker()
+
+
         else:
 
             raise ValueError(
@@ -166,6 +187,11 @@ def main():
 
     last_detection_time = None
 
+    # CSRT keeps the class information from the YOLO
+    # detection used to initialize the single target.
+    csrt_class_id = None
+    csrt_class_name = "object"
+
 
     # =====================================================
     # Main loop
@@ -204,10 +230,220 @@ def main():
 
 
             # =================================================
-            # OC-SORT
+            # CSRT
             # =================================================
 
             if (
+                mode == "track"
+                and tracker_name == "csrt"
+            ):
+
+                # ---------------------------------------------
+                # First target: YOLO detection + CSRT init
+                # ---------------------------------------------
+
+                if not tracker.initialized:
+
+                    model_start = (
+                        time.perf_counter()
+                    )
+
+
+                    results = model.detect(
+                        frame
+                    )
+
+
+                    model_end = (
+                        time.perf_counter()
+                    )
+
+
+                    model_call_latency = (
+                        model_end
+                        - model_start
+                    ) * 1000
+
+
+                    result = results[0]
+                    boxes = result.boxes
+
+
+                    inference_latency = (
+                        result.speed.get(
+                            "inference",
+                            0.0
+                        )
+                    )
+
+
+                    raw_detections = []
+
+
+                    for box in boxes:
+
+                        class_id = int(
+                            box.cls[0]
+                        )
+
+                        confidence = float(
+                            box.conf[0]
+                        )
+
+                        x1, y1, x2, y2 = (
+                            box.xyxy[0].tolist()
+                        )
+
+
+                        raw_detections.append(
+                            {
+                                "bbox": [
+                                    x1,
+                                    y1,
+                                    x2,
+                                    y2
+                                ],
+
+                                "class_id":
+                                    class_id,
+
+                                "class_name":
+                                    result.names[
+                                        class_id
+                                    ],
+
+                                "confidence":
+                                    confidence
+                            }
+                        )
+
+
+                    target = (
+                        select_highest_confidence(
+                            raw_detections
+                        )
+                    )
+
+
+                    if target is not None:
+
+                        tracker.init(
+                            frame,
+                            target["bbox"]
+                        )
+
+                        csrt_class_id = (
+                            target["class_id"]
+                        )
+
+                        csrt_class_name = (
+                            target["class_name"]
+                        )
+
+                        detections = [
+                            {
+                                "bbox":
+                                    target["bbox"],
+
+                                "track_id":
+                                    1,
+
+                                "class_id":
+                                    csrt_class_id,
+
+                                "class_name":
+                                    csrt_class_name,
+
+                                # This confidence is from the
+                                # YOLO initialization frame.
+                                "confidence":
+                                    target["confidence"],
+
+                                "predicted_x":
+                                    None,
+
+                                "predicted_y":
+                                    None,
+
+                                "velocity_x":
+                                    None,
+
+                                "velocity_y":
+                                    None
+                            }
+                        ]
+
+
+                # ---------------------------------------------
+                # Following frames: CSRT only, no YOLO
+                # ---------------------------------------------
+
+                else:
+
+                    tracker_start = (
+                        time.perf_counter()
+                    )
+
+
+                    success, bbox = (
+                        tracker.update(
+                            frame
+                        )
+                    )
+
+
+                    tracker_end = (
+                        time.perf_counter()
+                    )
+
+
+                    model_call_latency = (
+                        tracker_end
+                        - tracker_start
+                    ) * 1000
+
+
+                    if success:
+
+                        detections = [
+                            {
+                                "bbox":
+                                    bbox,
+
+                                "track_id":
+                                    1,
+
+                                "class_id":
+                                    csrt_class_id,
+
+                                "class_name":
+                                    csrt_class_name,
+
+                                # CSRT does not provide a YOLO-
+                                # style confidence score.
+                                "confidence":
+                                    None,
+
+                                "predicted_x":
+                                    None,
+
+                                "predicted_y":
+                                    None,
+
+                                "velocity_x":
+                                    None,
+
+                                "velocity_y":
+                                    None
+                            }
+                        ]
+
+
+            # =================================================
+            # OC-SORT
+            # =================================================
+
+            elif (
                 mode == "track"
                 and tracker_name == "ocsort"
             ):
@@ -553,7 +789,23 @@ def main():
                 # Label
                 # ---------------------------------------------
 
-                if track_id is not None:
+                if confidence is None:
+
+                    if track_id is not None:
+
+                        label = (
+                            f"{class_name} "
+                            f"ID:{track_id}"
+                        )
+
+                    else:
+
+                        label = (
+                            f"{class_name}"
+                        )
+
+
+                elif track_id is not None:
 
                     label = (
                         f"{class_name} "
