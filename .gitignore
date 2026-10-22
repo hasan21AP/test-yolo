@@ -5,36 +5,61 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 
 # =========================================================
-# Virtual Environment
+# Virtual Environments
 # =========================================================
 .venv/
+.venv-k230/
 venv/
 env/
+ENV/
 
 
 # =========================================================
-# VS Code
+# VS Code / IDE
 # =========================================================
 .vscode/
+.idea/
+*.code-workspace
+
+
+# =========================================================
+# Environment Variables / Secrets
+# =========================================================
+.env
+.env.*
+!.env.example
 
 
 # =========================================================
 # Datasets
 # =========================================================
 datasets/
+data/
+drone_dataset_source/
+
+# Calibration datasets
+drone_calibration/
+drone_calibration_verified/
 
 
 # =========================================================
-# Training outputs
+# Training Outputs
 # =========================================================
 runs/
+weights/
+checkpoints/
 
 
 # =========================================================
-# Model weights / exported models
+# AI Models / Exported Models
 # =========================================================
 *.pt
 *.pth
@@ -42,43 +67,78 @@ runs/
 *.kmodel
 *.engine
 *.torchscript
+*.tflite
+*.pb
+*.safetensors
 
 
 # =========================================================
-# Test media
+# K230 / nncase Tools
+# =========================================================
+
+# Downloaded Kendryte tools
+k230_tools/
+test_yolov8/
+test_yolov8.zip
+
+# nncase compilation artifacts
+gmodel_dump_dir/
+gmodel*/
+*.nncase_cache
+
+
+# =========================================================
+# Test Media
 # =========================================================
 tests/videos/
 tests/images/
 
 
 # =========================================================
-# Monitoring / Benchmark outputs
+# Media Files
+# =========================================================
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.webp
+*.gif
+
+*.mp4
+*.avi
+*.AVI
+*.mov
+*.mkv
+*.wmv
+*.webm
+
+
+# =========================================================
+# Monitoring / Benchmark Outputs
 # =========================================================
 *.csv
 results/
 logs/
+benchmarks/results/
 
 
 # =========================================================
-# OS files
-# =========================================================
-.DS_Store
-Thumbs.db
-desktop.ini
-
-
-# =========================================================
-# Temporary files
+# Temporary Files
 # =========================================================
 *.tmp
 *.temp
 *.log
+*.bak
+*.swp
+*.swo
+
+*.zip
+
 
 # =========================================================
-# Media files
+# OS Files
 # =========================================================
-
-*.png
-*.jpeg
-*.mp4
-*.AVI
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
