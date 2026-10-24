@@ -5,22 +5,22 @@ model: "runs/detect/drone_only_v2.pt"
 device: 0
 
 # YOLO
-imgsz: 640
+imgsz: 320
 conf: 0.2
 
 # Mode
 mode: track
 
 # Will be used later when mode = track
-tracker: ocsort
+tracker: single_iou
 
 # Detection timing
 detection_mode: continuous
 detection_interval: 0.1
 
 # Source
-source_type: webcam
-source: 1
+source_type: video
+source: "tests/test1-fixed.mp4"
 
 # Output
 show: true

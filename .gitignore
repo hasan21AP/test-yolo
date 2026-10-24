@@ -1,84 +1,175 @@
 # =========================================================
 # Python
 # =========================================================
+
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+*.pyc
+*$py.class
+
+# Python build files
+build/
+dist/
+*.egg-info/
+.eggs/
 
 
 # =========================================================
-# Virtual Environment
+# Virtual Environments
 # =========================================================
+
 .venv/
+.venv-k230/
+.venv*/
 venv/
 env/
+ENV/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
 
 
 # =========================================================
-# VS Code
+# VS Code / IDE
 # =========================================================
+
 .vscode/
+.idea/
+*.code-workspace
+
+
+# =========================================================
+# Python Cache / Testing
+# =========================================================
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+htmlcov/
 
 
 # =========================================================
 # Datasets
 # =========================================================
+
 datasets/
+drone_dataset_source/
+
+# Dataset formats
+*.tfrecord
+*.record
 
 
 # =========================================================
-# Training outputs
+# Training Outputs
 # =========================================================
+
 runs/
+results/
+logs/
+
+# Monitoring and benchmark files
+*.csv
+*.log
 
 
 # =========================================================
-# Model weights / exported models
+# YOLO Model Weights
 # =========================================================
+
 *.pt
 *.pth
 *.onnx
 *.kmodel
 *.engine
 *.torchscript
+*.tflite
+*.safetensors
 
 
 # =========================================================
-# Test media
+# K230 / Model Conversion
 # =========================================================
+
+# Generated model dumps
+kmodel_dump_dir/
+
+# Conversion temporary files
+*.bin
+*.npy
+*.npz
+
+
+# =========================================================
+# Test Videos / Images
+# =========================================================
+
 tests/videos/
 tests/images/
 
+# Videos
+*.mp4
+*.avi
+*.AVI
+*.mov
+*.mkv
+*.webm
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.webp
+
+# Audio
+*.mp3
+*.wav
+*.flac
+
 
 # =========================================================
-# Monitoring / Benchmark outputs
+# Archives / Compressed Files
 # =========================================================
-*.csv
-results/
-logs/
+
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
 
 
 # =========================================================
-# OS files
+# Temporary Files
 # =========================================================
+
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+
+# =========================================================
+# OS Files
+# =========================================================
+
 .DS_Store
 Thumbs.db
 desktop.ini
 
+# Windows
+$RECYCLE.BIN/
 
-# =========================================================
-# Temporary files
-# =========================================================
-*.tmp
-*.temp
-*.log
 
-# =========================================================
-# Media files
-# =========================================================
 
-*.png
-*.jpeg
-*.mp4
-*.AVI
+*.txt
+*.sc
+*.desc
