@@ -1,17 +1,17 @@
 # Model
-model: "runs/detect/drone_only_v2.kmodel"
+model: "runs/detect/drone_only_v2.pt"
 
 # Device
 device: 0
 
 # YOLO
-imgsz: 320
+imgsz: 640
 conf: 0.2
 
 # Mode
 mode: track
 
-# Tracker
+# Will be used later when mode = track
 tracker: ocsort
 
 # Detection timing
@@ -19,8 +19,8 @@ detection_mode: continuous
 detection_interval: 0.1
 
 # Source
-source_type: video
-source: "D:/AI/test-yolo/tests/test1_720p_30fps.mp4"
+source_type: webcam
+source: 1
 
 # Output
 show: true

@@ -5,61 +5,36 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-*.so
-*.egg-info/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
 
 
 # =========================================================
-# Virtual Environments
+# Virtual Environment
 # =========================================================
 .venv/
-.venv-k230/
 venv/
 env/
-ENV/
 
 
 # =========================================================
-# VS Code / IDE
+# VS Code
 # =========================================================
 .vscode/
-.idea/
-*.code-workspace
-
-
-# =========================================================
-# Environment Variables / Secrets
-# =========================================================
-.env
-.env.*
-!.env.example
 
 
 # =========================================================
 # Datasets
 # =========================================================
 datasets/
-data/
-drone_dataset_source/
-
-# Calibration datasets
-drone_calibration/
-drone_calibration_verified/
 
 
 # =========================================================
-# Training Outputs
+# Training outputs
 # =========================================================
 runs/
-weights/
-checkpoints/
 
 
 # =========================================================
-# AI Models / Exported Models
+# Model weights / exported models
 # =========================================================
 *.pt
 *.pth
@@ -67,78 +42,43 @@ checkpoints/
 *.kmodel
 *.engine
 *.torchscript
-*.tflite
-*.pb
-*.safetensors
 
 
 # =========================================================
-# K230 / nncase Tools
-# =========================================================
-
-# Downloaded Kendryte tools
-k230_tools/
-test_yolov8/
-test_yolov8.zip
-
-# nncase compilation artifacts
-gmodel_dump_dir/
-gmodel*/
-*.nncase_cache
-
-
-# =========================================================
-# Test Media
+# Test media
 # =========================================================
 tests/videos/
 tests/images/
 
 
 # =========================================================
-# Media Files
-# =========================================================
-*.png
-*.jpg
-*.jpeg
-*.bmp
-*.webp
-*.gif
-
-*.mp4
-*.avi
-*.AVI
-*.mov
-*.mkv
-*.wmv
-*.webm
-
-
-# =========================================================
-# Monitoring / Benchmark Outputs
+# Monitoring / Benchmark outputs
 # =========================================================
 *.csv
 results/
 logs/
-benchmarks/results/
 
 
 # =========================================================
-# Temporary Files
-# =========================================================
-*.tmp
-*.temp
-*.log
-*.bak
-*.swp
-*.swo
-
-*.zip
-
-
-# =========================================================
-# OS Files
+# OS files
 # =========================================================
 .DS_Store
 Thumbs.db
 desktop.ini
-$RECYCLE.BIN/
+
+
+# =========================================================
+# Temporary files
+# =========================================================
+*.tmp
+*.temp
+*.log
+
+# =========================================================
+# Media files
+# =========================================================
+
+*.png
+*.jpeg
+*.mp4
+*.AVI
